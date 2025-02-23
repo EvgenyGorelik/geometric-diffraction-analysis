@@ -56,15 +56,19 @@ labels.json:
 '''
 
 class DIFFFibonacciDataset(Dataset):
-    def __init__(self, root_dir, label_file : str = 'labels.json', transform=None):
+    def __init__(self, root_dir, label_file : str = 'labels.json', classes : str = None, transform=None):
         self.root_dir = root_dir
         self.file_dir = os.path.join(root_dir, 'files')
         self.data_list = os.listdir(self.file_dir)
         self.transform = transform
         self.label_file = os.path.join(root_dir, label_file)
         self.labels = self.load_labels()
-        self.classes  = ['2DZone', '3DLaueIntersections']
-        self.file_class_map = {i: self.classes[i] for i in range(len(self.classes))}
+        if classes:
+            with open(classes, 'r') as f:
+                self.classes = json.load(f)
+        else:
+            self.classes  = list(set(self.labels.values()))
+        self.file_class_map = {self.classes[i]: i for i in range(len(self.classes))}
         self.num_classes = len(self.file_class_map)
 
     def load_labels(self):
@@ -88,7 +92,7 @@ class DIFFFibonacciDataset(Dataset):
 
 
 def get_class_weights(dataset):
-    class_counts = [0, 0]
+    class_counts = torch.zeros(dataset.num_classes)
     for _, label in dataset:
         class_counts[label] += 1
     class_weights = 1. / torch.tensor(class_counts, dtype=torch.float)
@@ -101,10 +105,10 @@ def get_sampler(dataset, class_weights):
     sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
     return sampler
 
-def create_dataloader(root_dir, batch_size=32, transform=None, use_class_weights=False):
+def create_dataloader(root_dir, classes = None, batch_size=32, transform=None, use_class_weights=False):
     assert os.path.exists(root_dir), f"Directory {root_dir} does not exist"
     # Create datasets
-    dataset = DIFFFibonacciDataset(root_dir=root_dir, transform=transform)
+    dataset = DIFFFibonacciDataset(root_dir=root_dir, classes=classes, transform=transform)
 
     if use_class_weights:
         # Calculate class weights

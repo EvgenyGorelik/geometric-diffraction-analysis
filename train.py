@@ -70,8 +70,8 @@ def main():
 
     # Create dataloaders
     print('Creating dataloaders...')
-    train_loader = create_dataloader(root_dir=os.path.join(root_dir, 'train'), batch_size=batch_size, transform=transform, use_class_weights=use_class_weights)
-    val_loader = create_dataloader(root_dir=os.path.join(root_dir, 'val'), batch_size=batch_size, transform=transform, use_class_weights=use_class_weights)
+    train_loader = create_dataloader(root_dir=os.path.join(root_dir, 'train'), classes=os.path.join(root_dir, 'classes.json'), batch_size=batch_size, transform=transform, use_class_weights=use_class_weights)
+    val_loader = create_dataloader(root_dir=os.path.join(root_dir, 'val'), classes=os.path.join(root_dir, 'classes.json'), batch_size=batch_size, transform=transform, use_class_weights=use_class_weights)
 
     # Model, loss function, and optimizer
     print('Creating model...')

@@ -49,13 +49,20 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='Inference script for image classification')
     parser.add_argument('model_path', type=str, help='Path to the model weights file')
     parser.add_argument('image_path', type=str, help='Path to the image file or directory containing images')
+    parser.add_argument('--classes', type=str, help='Path to the labels file', default=None)
     parser.add_argument('--visualize', action='store_true', help='Display the image with predicted class')
     parser.add_argument('--output', type=str, help='Output file for results', default='results.json')
     args = parser.parse_args()
+
+
+    if args.classes:
+        with open(args.classes, 'r') as f:
+            CLASSES = json.load(f)
+
     # Load the saved weights
     model = models.resnet50()
     num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 2)  # CIFAR-10 has 10 classes
+    model.fc = nn.Linear(num_ftrs, len(CLASSES))  # CIFAR-10 has 10 classes
     model.load_state_dict(torch.load(args.model_path))
     model.eval()
 
@@ -66,6 +73,7 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+
 
     if os.path.isfile(args.image_path):
         # Load and preprocess the image

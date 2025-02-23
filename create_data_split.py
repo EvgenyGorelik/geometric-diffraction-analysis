@@ -76,6 +76,9 @@ def create_split(data_path: str = 'data', split_ratio: float = 0.8, labels: list
     with open(os.path.join(val_folder, 'labels.json'), 'w+') as f:
         json.dump(label_val_data, f, indent=4)
 
+    with open(os.path.join(output_folder, 'classes.json'), 'w+') as f:
+        json.dump(labels, f, indent=4)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Create data split for training and validation.')
     parser.add_argument('--data_path', type=str, default='../data/set1', help='Path to the data directory')
