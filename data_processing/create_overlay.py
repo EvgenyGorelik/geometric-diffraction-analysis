@@ -26,7 +26,6 @@ def overlay_images(img1, img2):
     return overlay
 
 def main(folder, output_folder):
-    folder = 'data/set1/3DLaueIntersections'
     images = load_images_from_folder(folder)
     
     if len(images) < 2:
