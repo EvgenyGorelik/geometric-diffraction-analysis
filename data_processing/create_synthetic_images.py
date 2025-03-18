@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 from scipy import ndimage
 import json
+from tqdm import tqdm
 
 from scipy.ndimage import maximum_filter
 
@@ -53,7 +54,7 @@ def main(args):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    for filename in os.listdir(input_folder):
+    for filename in tqdm(os.listdir(input_folder)):
         if filename.endswith('.tif'):
             img = np.asarray(Image.open(os.path.join(input_folder, filename)))
             img_converted = convert_img(
