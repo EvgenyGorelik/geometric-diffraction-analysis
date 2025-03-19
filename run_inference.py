@@ -107,7 +107,7 @@ if __name__ == '__main__':
         results = []
         print('Running inference on images in the directory...')
         for file in tqdm(os.listdir(args.image_path)):
-            if file.endswith('.jpg'):
+            if file.endswith('.jpg') or file.endswith('.png'):
                 img = Image.open(os.path.join(args.image_path, file))
                 img_t = preprocess(img)
                 batch_t = torch.unsqueeze(img_t, 0)

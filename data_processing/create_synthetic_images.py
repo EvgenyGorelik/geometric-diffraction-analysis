@@ -19,10 +19,10 @@ def non_max_suppression(img, size):
     return suppressed_img
 
 def convert_img(img: np.ndarray, img_size: tuple, dot_size: tuple, threshold: float, nms_size: int):
+    img_nms = non_max_suppression(img, nms_size)
 
-    non_max_suppression(img, nms_size)
-    canvas = np.ones_like(img)
-    canvas[img > threshold*(img.max() - img.min())] = 0
+    canvas = np.ones_like(img_nms)
+    canvas[img_nms > threshold*(img_nms.max() - img_nms.min())] = 0
 
     # Upscale canvas to the size of synth_img
     upscaled_canvas = cv2.resize(canvas, (img_size[1], img_size[0])).astype(canvas.dtype)
