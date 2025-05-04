@@ -147,14 +147,14 @@ def main():
         is_zonal = False
         if lin_indep_vectors is not None:
             lin_comb_sum = []
-            for hkl_test in range(3, len(hkl_included)):
+            for hkl_test in range(len(hkl_included)):
                 lin_comb_sum.append(is_linear_combination(lin_indep_vectors[0], lin_indep_vectors[1], lin_indep_vectors[2], hkl_included[hkl_test]))
             if sum(lin_comb_sum) > ZONAL_SAMPLE_THRESHOLD * len(hkl_included):
                 is_zonal = True
 
         projected_x, projected_y = project_reflections_2D(diffraction_spots, detector_distance, wavelength)
 
-        x_reduced, y_reduced = remove_random_pairs(projected_x, projected_y, fraction_limit_missing)
+        x_reduced, y_reduced, reduced_idx = remove_random_pairs(projected_x, projected_y, fraction_limit_missing)
         x_augmented, y_augmented = add_random_pairs(x_reduced, y_reduced, fraction_limit_additional)
         x_noisy, y_noisy = add_noise(x_augmented, y_augmented, noise_level)
         x_shifted, y_shifted, shift_vector = shift_points(x_noisy, y_noisy, max_shift)
@@ -172,6 +172,29 @@ def main():
         filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}/DIFF_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_ori_{indices[i, 0]}_{indices[i, 1]}_{indices[i, 2]}.jpg"
         if is_zonal:
             zonal_list.append(filename)
+        # Create the directory if it doesn't exist
+        filepath = os.path.dirname(filename)
+        if not os.path.exists(filepath):
+            os.makedirs(filepath)
+
+        F1.savefig(filename)
+        ax.clear()
+
+        zonal_idx = np.where(lin_comb_sum)[0]
+        # add zonal segmentation image
+        mapping = {k:v for k,v in zip(np.arange(len(reduced_idx))[reduced_idx].tolist(), np.arange(len(reduced_idx)).tolist())}
+        zonal_idx = [mapping[k] for k in zonal_idx if k in mapping]
+
+        ax.scatter(x_shifted[zonal_idx], y_shifted[zonal_idx], 10, color='k', marker='o')
+
+        ax.grid(False)
+        # ax.axis('equal')
+        ax.set_xlim([-edge, edge])
+        ax.set_ylim([-edge, edge])
+        ax.axis('off')
+
+        # Save the figure
+        filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}_zonal/DIFF_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_ori_{indices[i, 0]}_{indices[i, 1]}_{indices[i, 2]}.jpg"
         # Create the directory if it doesn't exist
         filepath = os.path.dirname(filename)
         if not os.path.exists(filepath):
