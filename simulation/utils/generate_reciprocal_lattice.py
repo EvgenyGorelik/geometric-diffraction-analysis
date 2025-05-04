@@ -39,8 +39,5 @@ def generate_reciprocal_lattice(v1, v2, v3, resolution):
     # Convert lists to NumPy arrays
     hkl_list = np.array(hkl_list)
     reflections = np.array(reflections)
-    
-    # Display results
-    print(f'Number of reflections within resolution shell: {len(hkl_list)}')
-    
+        
     return hkl_list, reflections
