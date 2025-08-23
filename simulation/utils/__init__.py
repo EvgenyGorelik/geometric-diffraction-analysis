@@ -14,3 +14,4 @@ from .add_noise import add_noise
 from .shift_points import shift_points
 from .save_parameters import save_parameters
 from .is_linear_combination import is_linear_combination
+from .find_linear_independent import find_linear_independent

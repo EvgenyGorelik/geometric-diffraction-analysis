@@ -43,3 +43,9 @@ Then we use this file for converting all experimental data to synthetic using
 ```
 python data_processing/create_synthetic_images.py ./data img_stats.json --output_folder ./data_processed --threshold 0.01 --nms_size 20
 ```
+
+
+
+## Experimental Data Simulator
+
+Simulate experiment data using the `simulate_experiment.py` script. It will automatically create simulated experiment data.

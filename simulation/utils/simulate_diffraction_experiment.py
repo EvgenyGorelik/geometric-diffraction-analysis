@@ -42,7 +42,5 @@ def simulate_diffraction_experiment(hkl_list, reflections, wavelength, tolerance
     diffraction_spots = np.array(diffraction_spots)
     hkl_included = np.array(hkl_included)
     
-    # Display the number of observed reflections
-    print(f'Number of diffraction spots: {len(diffraction_spots)}')
     
     return ewald_sphere, diffraction_spots, hkl_included

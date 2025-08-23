@@ -33,4 +33,4 @@ def remove_random_pairs(x, y, fraction_limit):
     x_reduced = x[mask]
     y_reduced = y[mask]
     
-    return x_reduced, y_reduced
+    return x_reduced, y_reduced, mask
