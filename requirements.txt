@@ -2,3 +2,5 @@ matplotlib==3.10.0
 torch==2.5.1
 torchvision==0.20.1
 tqdm==4.67.1
+scipy==1.15.3
+opencv-python==4.12.0.88
