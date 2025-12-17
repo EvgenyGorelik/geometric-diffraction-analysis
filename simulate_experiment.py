@@ -42,13 +42,14 @@ def main():
     parser.add_argument("--wavelength", type=float, default=0.0407, help="Wavelength in Å.")
     parser.add_argument("--excitation_error", type=float, default=0.015, help="Excitation error.")
     parser.add_argument("--detector_distance", type=float, default=0, help="Detector distance.")
-    parser.add_argument("--edge", type=float, default=1, help="Edge length for plotting.")
+    parser.add_argument("--edge", type=float, default=1.5, help="Edge length for plotting.")
     parser.add_argument("--fraction_limit_missing", type=float, default=0.03, help="Fraction limit for missing reflections.")
     parser.add_argument("--fraction_limit_additional", type=float, default=0.05, help="Fraction limit for additional reflections.")
     parser.add_argument("--noise_level", type=float, default=0.0012, help="Noise level.")
     parser.add_argument("--max_shift", type=float, default=0.01, help="Maximum shift for reflections.")
     parser.add_argument("--N", type=int, default=1000, help="Number of orientations.")
     parser.add_argument("--zonal_sample_threshold", type=float, default=0.9, help="Threshold for zonal sample detection.")
+    parser.add_argument("--zonal_segmentation_threshold", type=float, default=0.4, help="Threshold for zonal segmentation.")
     parser.add_argument("--output_folder", type=str, default="output", help="Output folder for saving results.")
 
     args = parser.parse_args()
@@ -75,6 +76,7 @@ def main():
     N = args.N
     # if more than that percentage of reflections are linearly dependend, the pattern is considered zonal
     ZONAL_SAMPLE_THRESHOLD = args.zonal_sample_threshold
+    ZONAL_SEGMENTATION_THRESHOLD = args.zonal_segmentation_threshold
 
     # Create output folder if it doesn't exist
     output_folder = args.output_folder
@@ -134,6 +136,7 @@ def main():
     F1, ax = plt.subplots(figsize=(5, 5))
 
     zonal_list = []
+    segmentation_list = []
 
     print("Simulating diffraction patterns...")
 
@@ -179,29 +182,46 @@ def main():
 
         F1.savefig(filename)
         ax.clear()
+        if sum(lin_comb_sum) > ZONAL_SEGMENTATION_THRESHOLD * len(hkl_included):
+            zonal_idx = np.where(lin_comb_sum)[0]
+            # add zonal segmentation image
+            mapping = {k:v for k,v in zip(np.arange(len(reduced_idx))[reduced_idx].tolist(), np.arange(len(reduced_idx)).tolist())}
+            zonal_idx = [mapping[k] for k in zonal_idx if k in mapping]
 
-        zonal_idx = np.where(lin_comb_sum)[0]
-        # add zonal segmentation image
-        mapping = {k:v for k,v in zip(np.arange(len(reduced_idx))[reduced_idx].tolist(), np.arange(len(reduced_idx)).tolist())}
-        zonal_idx = [mapping[k] for k in zonal_idx if k in mapping]
+            ax.scatter(x_shifted[zonal_idx], y_shifted[zonal_idx], 10, color='k', marker='o')
 
-        ax.scatter(x_shifted[zonal_idx], y_shifted[zonal_idx], 10, color='k', marker='o')
+            ax.grid(False)
+            # ax.axis('equal')
+            ax.set_xlim([-edge, edge])
+            ax.set_ylim([-edge, edge])
+            ax.axis('off')
 
-        ax.grid(False)
-        # ax.axis('equal')
-        ax.set_xlim([-edge, edge])
-        ax.set_ylim([-edge, edge])
-        ax.axis('off')
+            # Save the figure
+            filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}_zonal_seg/DIFF_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_ori_{indices[i, 0]}_{indices[i, 1]}_{indices[i, 2]}.jpg"
+            # Create the directory if it doesn't exist
+            filepath = os.path.dirname(filename)
+            if not os.path.exists(filepath):
+                os.makedirs(filepath)
 
-        # Save the figure
-        filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}_zonal/DIFF_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_ori_{indices[i, 0]}_{indices[i, 1]}_{indices[i, 2]}.jpg"
-        # Create the directory if it doesn't exist
-        filepath = os.path.dirname(filename)
-        if not os.path.exists(filepath):
-            os.makedirs(filepath)
+            F1.savefig(filename)
+            ax.clear()
+            segmentation_list.append(filename)
+        else:
+            ax.scatter([], [])  # clear the axis
+            ax.grid(False)
+            ax.set_xlim([-edge, edge])
+            ax.set_ylim([-edge, edge])
+            ax.axis('off')
 
-        F1.savefig(filename)
-        ax.clear()
+            # Save the figure
+            filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}_zonal_seg/DIFF_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_ori_{indices[i, 0]}_{indices[i, 1]}_{indices[i, 2]}.jpg"
+            # Create the directory if it doesn't exist
+            filepath = os.path.dirname(filename)
+            if not os.path.exists(filepath):
+                os.makedirs(filepath)
+
+            F1.savefig(filename)
+            ax.clear()
 
     # Save parameters to a text file
     params_filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}_params.txt"
@@ -211,6 +231,11 @@ def main():
     print(f"Saving 2D zones to {zonal_filename}...")
     with open(zonal_filename, 'w+') as fp:
         fp.write('\n'.join(zonal_list))
+
+    segmentation_filename = f"{output_folder}/volume_{target_volume}/CELL_{a}_{b}_{c}_{alpha}_{beta}_{gamma}_WL_{wavelength}_ExcErr_{excitation_error}_RES_{resolution}_zonal_seg.txt"
+    print(f"Saving zonal segmentation to {segmentation_filename}...")
+    with open(segmentation_filename, 'w+') as fp:
+        fp.write('\n'.join(segmentation_list))
 
 
     print("DONE")
