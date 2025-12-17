@@ -49,3 +49,21 @@ python data_processing/create_synthetic_images.py ./data img_stats.json --output
 ## Experimental Data Simulator
 
 Simulate experiment data using the `simulate_experiment.py` script. It will automatically create simulated experiment data.
+
+
+## Segmentation Data Preparation
+
+Simulate experiment multiple times (e.g. 10):
+```
+count=10 for i in $(seq 1 ${count}); do python simulate_experiment.py --output_folder data; done
+```
+
+Prepare data for training:
+```
+python utils/prepare_segmentation_data.py --data_path data/volume_500/ --output_path data/segmentation
+```
+
+Train segmentation
+```
+python train_segmentation.py --num_epochs 8 > segmentation_"$(date +%s)".log
+```
