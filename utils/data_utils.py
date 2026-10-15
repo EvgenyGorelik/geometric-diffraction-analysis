@@ -122,6 +122,29 @@ def create_dataloader(root_dir, classes = None, batch_size=32, transform=None, u
     # Create dataloaders with samplers
     return DataLoader(dataset, batch_size=batch_size, sampler=sampler)
 
+''' 
+Data structure for ZonalDataset:
+    data
+        
+'''
+
+class ZonalDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.data_list = os.listdir(root_dir)
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+        img_name = os.path.join(self.root_dir, self.data_list[idx]) 
+        image = Image.open(img_name).convert('RGB')
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image
 
 if __name__ == "__main__":
     import numpy as np
