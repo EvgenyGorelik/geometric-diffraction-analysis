@@ -11,6 +11,7 @@ from scipy.spatial.transform import Rotation
 from simulation.utils.lattice_parameters_reciprocal import lattice_parameters_reciprocal
 from simulation.utils.reciprocal_lattice_vectors import reciprocal_lattice_vectors
 from simulation.utils.simulate_diffraction_experiment import ewald_association
+from simulation.utils.camera_projection import camera_matrices, project_camera, rasterize_camera
 
 
 def load_config(path):
@@ -100,27 +101,6 @@ def scan_angles(start, stop, step):
     return start + np.arange(count) * step
 
 
-def project_to_detector(spots, wavelength, detector_distance):
-    """Repository detector convention; return coordinates and source-row indices."""
-    radius = 1 / wavelength
-    denominator = spots[:, 2] - radius
-    with np.errstate(divide='ignore', invalid='ignore'):
-        scale = (-detector_distance-radius) / denominator
-    valid = np.isfinite(scale) & (scale > 0)
-    return spots[valid, :2] * scale[valid, None], np.flatnonzero(valid)
-
-
-def rasterize(xy, intensities, size, edge):
-    """Nearest pixel impulses; coincident spots add. No scaling or clipping."""
-    image = np.zeros((size, size), dtype=np.float64)
-    valid = np.isfinite(xy).all(axis=1) & (np.abs(xy) <= edge).all(axis=1)
-    pixels = np.full((len(xy), 2), -1, dtype=int)
-    pixels[valid, 0] = np.rint((xy[valid, 0]+edge)/(2*edge)*(size-1)).astype(int)
-    pixels[valid, 1] = np.rint((edge-xy[valid, 1])/(2*edge)*(size-1)).astype(int)
-    np.add.at(image, (pixels[valid, 1], pixels[valid, 0]), intensities[valid])
-    return image, pixels, valid
-
-
 def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
     config = dict(config)
     basis = reciprocal_basis(config)
@@ -153,7 +133,8 @@ def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
     initial = np.asarray(config.get('initial_euler_deg', [0, 0, 0]), dtype=float)
     if initial.shape != (3,) or not np.isfinite(initial).all():
         raise ValueError('initial_euler_deg must contain three finite xyz Euler angles')
-    reflections = Rotation.from_euler('xyz', initial, degrees=True).apply(hkl @ basis)
+    initial_rotation = Rotation.from_euler('xyz', initial, degrees=True)
+    reflections = initial_rotation.apply(hkl @ basis)
     tolerance = float(config.get('excitation_error', 0.015))
     slope = float(config.get('excitation_error_slope', 0))
     reference_hkl = np.asarray(config.get('excitation_reference_hkl', [0, 0, 0]), dtype=float)
@@ -162,36 +143,54 @@ def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
     reference_radius = float(np.linalg.norm(reference_hkl @ basis))
     ewald_association(reflections, wavelength, tolerance, slope, reference_radius)  # validate before output
     size = config.get('image_size', 1024)
-    edge = float(config.get('edge', 1.5))
-    distance = float(config.get('detector_distance', 0))
-    if not isinstance(size, int) or isinstance(size, bool) or size < 2 or not np.isfinite(edge) or edge <= 0 or not np.isfinite(distance) or distance < 0:
-        raise ValueError('image_size must be integer >=2; edge positive; detector_distance nonnegative')
+    if not isinstance(size, int) or isinstance(size, bool) or size < 2:
+        raise ValueError('image_size must be integer >=2')
+    if 'edge' in config or 'detector_distance' in config:
+        raise ValueError('camera projection uses focal_length_px, principal_point_px and camera_distance; remove legacy edge/detector_distance')
+    intrinsic, extrinsic = camera_matrices(size, wavelength, config.get('focal_length_px'),
+        config.get('principal_point_px'), config.get('camera_distance'))
+    spot_radius = config.get('spot_radius_px', 5)
+    rasterize_camera(np.empty((0, 2)), np.empty(0), size, spot_radius)  # validate
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError('output directory must be empty to avoid mixing experiments')
     config.update(intensity_mode=mode, hkl_file=str(Path(hkl_path).resolve()) if hkl_path else None,
-                  rotation_axis=axis.tolist())
+                  rotation_axis=axis.tolist(), focal_length_px=float(intrinsic[0, 0]),
+                  principal_point_px=intrinsic[:2, 2].tolist(), camera_distance=float(extrinsic[2, 3]),
+                  spot_radius_px=spot_radius, image_size=size, wavelength=wavelength, resolution=resolution,
+                  start_deg=float(angles[0]), stop_deg=float(config.get('stop_deg', 180)),
+                  step_deg=float(config.get('step_deg', 1)), initial_euler_deg=initial.tolist(),
+                  excitation_error=tolerance, excitation_error_slope=slope,
+                  excitation_reference_hkl=reference_hkl.tolist(), projection='pinhole')
     (output/'config.json').write_text(json.dumps(config, indent=2)+'\n')
+    (output/'intrinsics.json').write_text(json.dumps(intrinsic.tolist(), indent=2)+'\n')
+    extrinsics = []
     frames = []
     for frame, angle in enumerate(angles):
-        rotated = Rotation.from_rotvec(axis*np.deg2rad(angle)).apply(reflections)
+        rotation = Rotation.from_rotvec(axis*np.deg2rad(angle))
+        rotated = rotation.apply(reflections)
+        # Effective extrinsic maps the original hkl@basis lattice to this camera.
+        lattice_pose = np.eye(4)
+        lattice_pose[:3, :3] = (rotation * initial_rotation).as_matrix()
+        extrinsics.append((extrinsic @ lattice_pose).tolist())
         mask, errors, thresholds = ewald_association(rotated, wavelength, tolerance, slope, reference_radius)
         selected = np.flatnonzero(mask)
-        xy, projected = project_to_detector(rotated[mask], wavelength, distance)
+        xy, depths, projected = project_camera(rotated[mask], intrinsic, extrinsic)
         selected = selected[projected]
-        image, pixels, valid = rasterize(xy, intensities[selected], size, edge)
+        image, pixels, valid = rasterize_camera(xy, intensities[selected], size, spot_radius)
         stem = f'frame_{frame:05d}'
         np.save(output/f'{stem}.npy', image)
         # Float TIFF keeps high dynamic range; NPY is the authoritative float64 image.
         Image.fromarray(image.astype(np.float32)).save(output/f'{stem}.tif')
         with (output/f'{stem}.csv').open('w', newline='') as fp:
             writer = csv.writer(fp)
-            writer.writerow(['h', 'k', 'l', 'intensity', 'x', 'y', 'column', 'row', 'sphere_error', 'threshold'])
+            writer.writerow(['h', 'k', 'l', 'intensity', 'x', 'y', 'column', 'row', 'depth', 'sphere_error', 'threshold'])
             for j in np.flatnonzero(valid):
                 idx = selected[j]
-                writer.writerow([*hkl[idx], intensities[idx], *xy[j], *pixels[j], errors[idx], thresholds[idx]])
+                writer.writerow([*hkl[idx], intensities[idx], *xy[j], *pixels[j], depths[j], errors[idx], thresholds[idx]])
         frames.append({'frame': frame, 'angle_deg': float(angle), 'reflections_on_detector': int(valid.sum()), 'image': f'{stem}.npy'})
+    (output/'extrinsics.json').write_text(json.dumps(extrinsics, indent=2)+'\n')
     (output/'frames.json').write_text(json.dumps(frames, indent=2)+'\n')
     return frames
 

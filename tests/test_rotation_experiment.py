@@ -1,4 +1,6 @@
+import csv
 import json
+from PIL import Image
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,7 +9,8 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from simulation.rotation_experiment import (load_config, reciprocal_basis, load_hkl,
-    scan_angles, generate_hkl, rasterize, project_to_detector, run_experiment)
+    scan_angles, generate_hkl, run_experiment)
+from simulation.utils.camera_projection import camera_matrices, project_camera, rasterize_camera
 from simulation.utils.simulate_diffraction_experiment import ewald_association, simulate_diffraction_experiment
 
 CELL = dict(a=10, b=10, c=10, alpha=90, beta=90, gamma=90, wavelength=.0251)
@@ -23,8 +26,14 @@ class RotationTests(unittest.TestCase):
     def test_rotation_geometry(self):
         point = Rotation.from_rotvec([0, np.pi/2, 0]).apply([[1, 0, 0]])
         np.testing.assert_allclose(point, [[0, 0, -1]], atol=1e-15)
-        xy, indices = project_to_detector(np.array([[1, 2, 0], [1, 0, 50]]), .0251, 0)
-        np.testing.assert_allclose(xy, [[1, 2]])
+        intrinsic, extrinsic = camera_matrices(1000, .0251)
+        points = np.array([[1, 2, 0], [1, 0, 50], [0, 0, 1/.0251]])
+        xy, depth, indices = project_camera(points, intrinsic, extrinsic)
+        np.testing.assert_allclose(xy, [[751, -2]])
+        np.testing.assert_allclose(depth, [1/.0251])
+        homogeneous = np.column_stack((points[:1], np.ones(1)))
+        expected = (intrinsic @ extrinsic @ homogeneous.T).T
+        np.testing.assert_allclose(xy, expected[:, :2]/expected[:, 2, None])
         np.testing.assert_equal(indices, [0])
 
     def test_dynamic_and_static_association(self):
@@ -45,12 +54,22 @@ class RotationTests(unittest.TestCase):
         np.testing.assert_allclose(thresholds, [.01, .05])
 
     def test_intensities_and_collisions(self):
-        xy = np.array([[0, 0], [.5, 0], [.5, 0], [2, 0]])
-        image, _, valid = rasterize(xy, np.array([1000, 4.5, 2, 8]), 5, 1)
+        xy = np.array([[2, 2], [3, 2], [3, 2], [5, 0]])
+        image, _, valid = rasterize_camera(xy, np.array([1000, 4.5, 2, 8]), 5, 0)
         self.assertEqual(image[2, 2], 1000)
         self.assertEqual(image[2, 3], 6.5)
         self.assertEqual(image.sum(), 1006.5)
         self.assertFalse(valid[-1])
+
+    def test_notebook_disc_rasterization(self):
+        xy = np.array([[5.8, 5.2]])
+        image, pixels, valid = rasterize_camera(xy, [1000], 12, 3)
+        yy, xx = np.mgrid[:12, :12]
+        expected = ((xx-5)**2+(yy-5)**2 < 9) * 1000
+        np.testing.assert_array_equal(image, expected)
+        self.assertEqual(pixels.tolist(), [[5, 5]])
+        with self.assertRaises(ValueError):
+            rasterize_camera(xy, [1], 12, -1)
 
     def test_config_hkl_and_end_to_end(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -64,13 +83,22 @@ class RotationTests(unittest.TestCase):
             file.write_text('1 0 0 1000 0\n0 1 0 200.5 0\n0 0 0 0 0\n')
             hkl, intensity = load_hkl(file)
             np.testing.assert_equal(intensity, [1000, 200.5])
-            cfg = dict(CELL, start_deg=0, stop_deg=90, step_deg=90, image_size=33, edge=1,
+            cfg = dict(CELL, start_deg=0, stop_deg=90, step_deg=90, image_size=33, focal_length_px=1000, spot_radius_px=0,
                        excitation_error=.01, intensity_mode='hkl')
             frames = run_experiment(cfg, root/'raw', hkl_path=file)
             image = np.load(root/'raw/frame_00000.npy')
             self.assertEqual(image.max(), 1000)
             self.assertEqual(image.sum(), 1200.5)
             self.assertEqual(len(frames), 2)
+            np.testing.assert_array_equal(np.asarray(Image.open(root/'raw/frame_00000.tif')), image.astype(np.float32))
+            intrinsic = json.loads((root/'raw/intrinsics.json').read_text())
+            extrinsics = json.loads((root/'raw/extrinsics.json').read_text())
+            for frame_index in range(2):
+                with (root/f'raw/frame_{frame_index:05d}.csv').open() as fp:
+                    records = list(csv.DictReader(fp))
+                points = np.array([[int(row[k]) for k in ('h', 'k', 'l')] for row in records]) @ reciprocal_basis(CELL)
+                xy, _, _ = project_camera(points, intrinsic, extrinsics[frame_index])
+                np.testing.assert_allclose(xy, [[float(r['x']), float(r['y'])] for r in records])
             self.assertEqual(frames[1]['reflections_on_detector'], 1)
             self.assertEqual(json.loads((root/'raw/config.json').read_text())['intensity_mode'], 'hkl')
             run_experiment(cfg, root/'constant', hkl_path=file, intensity_mode='constant')

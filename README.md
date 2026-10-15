@@ -164,12 +164,15 @@ Each frame produces:
 - `frame_00000.npy`: authoritative float64 detector array, black background 0.
 - `frame_00000.tif`: float32 TIFF, preserving dynamic range for image software.
 - `frame_00000.csv`: on-detector HKL, input intensity, continuous projected x/y,
-  pixel column/row, Ewald error, and applied threshold.
-- `frames.json`: frame angles and spot counts; `config.json`: configuration.
+  pixel column/row, camera depth, Ewald error, and applied threshold.
+- `frames.json`: frame angles and spot counts; `config.json`: resolved configuration.
+- `intrinsics.json`: 3×3 pinhole K; `extrinsics.json`: per-frame 3×4 world-to-camera matrices.
 
 No normalization, amplitude squaring, Gaussian blur, partiality weighting,
 noise, or artificial central beam is applied. An isolated intensity 1000 gives
-pixel value 1000. Spots are nearest-pixel impulses and overlapping spots sum.
+pixel value 1000 throughout its circular spot. Spots use the notebook’s integer-center
+discs (`spot_radius_px=5` by default); overlapping spots sum. Set
+`spot_radius_px=0` for single-pixel impulses.
 Negative measured intensities are retained. TIFF may round decimal intensities
 to float32; use NPY when exact float64 values matter.
 
@@ -182,10 +185,26 @@ when merging is intended. A config's `hkl_file` is relative to the config;
 `--hkl-file` is relative to the working directory. In `constant` mode,
 `constant_intensity` sets the value (default 1000).
 
-Projection retains the existing simulator convention: sphere center +z/wavelength,
-projection from that center to z=-detector_distance. At detector_distance=0,
-x/y and `edge` have reciprocal-space units. `edge` is the detector half-width;
-`image_size` is its square pixel dimension. Rows increase downward, +y points up.
+Projection follows the pinhole camera in the `vggt` branch notebook
+`notebooks/extract_camera_positions.ipynb`: homogeneous pixel coordinates are
+`K @ [R|t] @ [x,y,z,1]`, divided by camera depth. Points at or behind the camera
+are excluded. The fixed camera is on +z looking toward the reciprocal origin;
+its default distance is `1/wavelength`, focal length is `10 * image_size` pixels,
+and principal point is `[image_size//2, image_size//2]`. Camera +y points downward.
+Set `focal_length_px`, `principal_point_px`, and `camera_distance` to override
+these defaults. `image_size` is the square image dimension. Legacy `edge` and
+`detector_distance` keys are rejected in configured scans to avoid silently
+changing their meaning. The Ewald sphere remains fixed while the lattice rotates.
+
+The camera pose is the notebook’s look-at pose at the fixed +z Ewald center.
+A rotation of the crystal is exported as the equivalent changing extrinsic
+relative to the original unrotated reciprocal lattice: each matrix in
+`extrinsics.json` projects `hkl @ basis`, including the initial Euler orientation
+and that frame’s scan rotation. Camera depth uses reciprocal-space units.
+Images are saved directly using PIL, with no Matplotlib rendering in configured
+experiments. Unlike the notebook’s black binary dots on white, these images use
+actual reflection intensities on a zero background.
+
 Original random training-data generation remains available without `--config`.
 
 Run regression checks with `python -m unittest discover -s tests -v`.
