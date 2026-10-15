@@ -27,11 +27,3 @@ def is_linear_combination(a, b, c, d, tol=1e-10):
         return np.allclose(M @ coeffs, target, atol=tol)
     except np.linalg.LinAlgError:
         return False  # If singular matrix (collinear vectors), no solution
-
-# Example usage
-a = np.array([0, 0])
-b = np.array([1, 0])
-c = np.array([0, 1])
-d = np.array([0.5, 0.5])  # Should return True
-
-print(is_linear_combination(a, b, c, d))

@@ -63,24 +63,3 @@ def generate_unit_cell_anisotropy(volume, a_range, b_range, c_range, alpha_range
         raise ValueError('Could not generate anisotropic unit cell parameters within the constraints.')
 
     return a, b, c, alpha, beta, gamma
-
-# Example usage:
-volume = 500
-a_range = [3.5, 15]
-b_range = [4, 30]
-c_range = [5, 45]
-alpha_range = [90, 120]
-beta_range = [90, 120]
-gamma_range = [90, 120]
-tolerance = 100
-anisotropy_limit = 1.5
-
-a, b, c, alpha, beta, gamma = generate_unit_cell_anisotropy(volume, a_range, b_range, c_range, alpha_range, beta_range, gamma_range, tolerance, anisotropy_limit)
-
-print(f"Generated unit cell parameters:")
-print(f"a = {a:.3f} Å")
-print(f"b = {b:.3f} Å")
-print(f"c = {c:.3f} Å")
-print(f"alpha = {alpha:.2f}°")
-print(f"beta = {beta:.2f}°")
-print(f"gamma = {gamma:.2f}°")

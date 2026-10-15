@@ -1,46 +1,43 @@
 import numpy as np
 
-def simulate_diffraction_experiment(hkl_list, reflections, wavelength, tolerance):
+
+def ewald_association(reflections, wavelength, tolerance, tolerance_slope=0.0, reference_radius=0.0):
+    """Return mask, radial sphere error and threshold, all in inverse Å.
+
+    threshold(G) = tolerance + tolerance_slope * max(0, ||G|| - reference_radius). The slope is
+    dimensionless. Reciprocal vectors follow the repository's 1/d convention.
     """
-    Simulates a diffraction experiment by identifying reflections that lie on the Ewald sphere.
-    
-    Parameters:
-        hkl_list (np.ndarray): List of Miller indices [h, k, l]
-        reflections (np.ndarray): List of reciprocal lattice vectors [Gx, Gy, Gz]
-        wavelength (float): Wavelength of the incident beam
-        tolerance (float): Tolerance for identifying diffraction spots
-    
-    Returns:
-        tuple: 
-            - ewald_sphere (np.ndarray): Points on the Ewald sphere for visualization
-            - diffraction_spots (np.ndarray): Identified diffraction spots
+    reflections = np.asarray(reflections, dtype=float).reshape(-1, 3)
+    if not np.isfinite(wavelength) or wavelength <= 0:
+        raise ValueError('wavelength must be finite and positive')
+    if not np.isfinite([tolerance, tolerance_slope, reference_radius]).all() or min(tolerance, tolerance_slope, reference_radius) < 0:
+        raise ValueError('Ewald tolerance and slope must be finite and nonnegative')
+    if not np.isfinite(reflections).all():
+        raise ValueError('reflections must be finite')
+    radius = 1 / wavelength
+    errors = np.abs(np.linalg.norm(reflections - [0, 0, radius], axis=1) - radius)
+    thresholds = tolerance + tolerance_slope * np.maximum(0, np.linalg.norm(reflections, axis=1) - reference_radius)
+    return errors < thresholds, errors, thresholds
+
+
+def simulate_diffraction_experiment(hkl_list, reflections, wavelength, tolerance,
+                                    tolerance_slope=0.0, *, include_sphere=True):
+    """Associate reflections with the Ewald sphere; retain the legacy return tuple.
+
+    Set include_sphere=False for scans to avoid constructing a visualization mesh.
+    tolerance_slope=0 preserves the original static association criterion.
     """
-    # Compute Ewald sphere radius
-    R = 1 / wavelength
-    
-    # Define the Ewald sphere center
-    ewald_center = np.array([0, 0, R])
-    
-    # Generate a mesh of points for visualization (optional)
-    theta, phi = np.meshgrid(np.linspace(0, np.pi, 200), np.linspace(0, 2 * np.pi, 400))
-    X = R * np.sin(theta) * np.cos(phi)
-    Y = R * np.sin(theta) * np.sin(phi)
-    Z = R * np.cos(theta)
-    
-    # Store sphere points for visualization
-    ewald_sphere = np.column_stack((X.ravel(), Y.ravel(), Z.ravel())) + ewald_center
-    
-    # Identify diffraction spots (reflections close to the Ewald sphere surface)
-    diffraction_spots = []
-    hkl_included = []
-    for i, G in enumerate(reflections):
-        distance_to_sphere = abs(np.linalg.norm(G - ewald_center) - R)
-        if distance_to_sphere < tolerance:  # Allow small tolerance for numerical accuracy
-            diffraction_spots.append(G)
-            hkl_included.append(hkl_list[i])
-    
-    diffraction_spots = np.array(diffraction_spots)
-    hkl_included = np.array(hkl_included)
-    
-    
-    return ewald_sphere, diffraction_spots, hkl_included
+    reflections = np.asarray(reflections, dtype=float).reshape(-1, 3)
+    hkl_list = np.asarray(hkl_list).reshape(-1, 3)
+    if len(hkl_list) != len(reflections):
+        raise ValueError('hkl_list and reflections must have equal lengths')
+    mask, _, _ = ewald_association(reflections, wavelength, tolerance, tolerance_slope)
+    sphere = np.empty((0, 3))
+    if include_sphere:
+        radius = 1 / wavelength
+        theta, phi = np.meshgrid(np.linspace(0, np.pi, 200), np.linspace(0, 2 * np.pi, 400))
+        sphere = radius * np.column_stack((
+            (np.sin(theta) * np.cos(phi)).ravel(),
+            (np.sin(theta) * np.sin(phi)).ravel(), np.cos(theta).ravel()))
+        sphere += [0, 0, radius]
+    return sphere, reflections[mask], hkl_list[mask]

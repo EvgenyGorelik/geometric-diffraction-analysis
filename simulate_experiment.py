@@ -1,3 +1,10 @@
+# Configured rotation experiments use quantitative detector images.
+import sys
+if __name__ == "__main__" and "--config" in sys.argv:
+    from simulation.rotation_experiment import main as rotation_main
+    rotation_main()
+    raise SystemExit(0)
+
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -51,6 +58,8 @@ def main():
     parser.add_argument("--zonal_sample_threshold", type=float, default=0.9, help="Threshold for zonal sample detection.")
     parser.add_argument("--zonal_segmentation_threshold", type=float, default=0.4, help="Threshold for zonal segmentation.")
     parser.add_argument("--output_folder", type=str, default="output", help="Output folder for saving results.")
+
+    parser.add_argument("--excitation_error_slope", type=float, default=0.0, help="Increase Ewald tolerance by slope times reciprocal radius.")
 
     args = parser.parse_args()
 
@@ -142,11 +151,12 @@ def main():
 
     for i in trange(orientations.shape[0]):
         rotated_reflections = align_reciprocal_lattice(reflections, orientations[i, :])
-        ewald_sphere, diffraction_spots, hkl_included = simulate_diffraction_experiment(hkl_list, rotated_reflections, wavelength, excitation_error)
+        ewald_sphere, diffraction_spots, hkl_included = simulate_diffraction_experiment(hkl_list, rotated_reflections, wavelength, excitation_error, args.excitation_error_slope)
         
 
         # Calculate a spanning linear space from linear independent hkl combinations and calculate how many points, can be linearly represented using this spanning tree
         lin_indep_vectors = find_linear_independent(hkl_included)
+        lin_comb_sum = []
         is_zonal = False
         if lin_indep_vectors is not None:
             lin_comb_sum = []
