@@ -208,3 +208,83 @@ actual reflection intensities on a zero background.
 Original random training-data generation remains available without `--config`.
 
 Run regression checks with `python -m unittest discover -s tests -v`.
+
+## Docker and unified command runner
+
+Run all command-line tools through `run.sh`. It builds the Docker image on first
+use, bind-mounts this checkout at `/workspace`, and forwards the command arguments.
+Outputs and checkpoints remain in your checkout. On Linux, the container runs
+with your UID/GID. Relative paths are relative to the repository root even when
+calling the script from another directory.
+
+```bash
+# Optional explicit build; otherwise the first command builds automatically.
+./run.sh build
+
+# Simulate with the supplied cell config (used by default).
+./run.sh simulate --output results/constant
+./run.sh --mount /data:/data:ro simulate \
+  --hkl-file /data/output.hkl --intensity-mode hkl --output results/measured
+
+# Custom config and scan; external config paths need a corresponding mount too.
+./run.sh simulate --config configs/rotation_experiment.json \
+  --axis 0 1 0 --start-deg -60 --stop-deg 60 --step-deg 0.5 \
+  --output results/custom
+
+# Original classification/segmentation data workflow.
+./run.sh simulate-random --output_folder data
+./run.sh split --data_path data/volume_500 \
+  --labels 2DZone 3DLaueIntersections --output_folder data/processed
+./run.sh train --root_dir data/processed \
+  --model_path models/trained.pth --num_epochs 8 --use_class_weights
+./run.sh infer models/trained.pth data/processed/val --output results.json
+./run.sh prepare-segmentation --data_path data/volume_500 --output_path data/segmentation
+./run.sh train-segmentation --data_dir data/segmentation --num_epochs 8
+./run.sh infer-segmentation --model_path models/segmentation.pth --input_dir data/images
+
+./run.sh test
+./run.sh shell
+./run.sh help
+# Per-command options:
+./run.sh simulate --help
+./run.sh train --help
+```
+
+The default Docker image includes CPU simulation and the repository's PyTorch
+2.5.1 / torchvision 0.20.1 pair with CUDA 12.4 wheels, using the
+[official PyTorch wheel index](https://pytorch.org/get-started/previous-versions/).
+Training/inference auto-enables GPUs when `nvidia-smi` works on the host;
+NVIDIA Container Toolkit must also be installed. Use `--gpus all` to request
+GPUs explicitly or `--gpus none` to force CPU execution. Simulation needs no GPU.
+For a smaller CPU-only image:
+
+```bash
+GDA_IMAGE=geometric-diffraction:cpu ./run.sh build --build-arg TORCH_BACKEND=cpu
+GDA_IMAGE=geometric-diffraction:cpu ./run.sh --gpus none train --root_dir data/processed
+```
+
+Build again after dependency/Dockerfile changes. Source edits are visible through
+the bind mount immediately. `GDA_IMAGE` selects the image name; `GDA_SHM_SIZE`
+controls container shared memory (default `2g`). Downloaded pretrained weights
+are cached in `.cache/torch` in your checkout. Initial training can require
+internet access to download torchvision weights. Existing model files are used
+from the mounted checkout; datasets, model weights, HKL files, secrets, and
+results are excluded from the image build context.
+
+For direct image use, mount a checkout containing configs/data/models:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/workspace" geometric-diffraction:latest simulate --output results/direct
+```
+
+`./run.sh --local COMMAND ...` skips Docker and uses the installed Python
+interpreter (`PYTHON` overrides `python3`). Full local functionality requires
+`requirements.txt` and `requirements-simulation.txt`; configured simulation alone
+needs only `requirements-simulation.txt`. Docker is the default execution mode.
+
+Additional preprocessing commands are `convert-tif`, `synthetic`, `stats`,
+`overlay`, and `extract-peaks`; each accepts the underlying script's `--help`.
+`python` forwards arbitrary Python arguments for diagnostics or custom work.
+Configured rotation output is quantitative diffraction data; the existing
+classification training workflow expects the original labeled directory split.
