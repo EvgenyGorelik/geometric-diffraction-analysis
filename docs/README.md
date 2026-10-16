@@ -2,18 +2,18 @@
 
 Create datastructure:
 ```
-python create_data_split.py --data_path <path/to/data> --labels 2DZone 3DLaueIntersections MultipleCrystals --output_folder data
+./run.sh split --data_path <path/to/data> --labels 2DZone 3DLaueIntersections MultipleCrystals --output_folder data
 ```
 
 Training:
 ```
-python train.py --root_dir data --model_path models/diff_fibonacci_model.pth --use_class_weights
+./run.sh train --root_dir data --model_path models/diff_fibonacci_model.pth --use_class_weights
 ```
 
 
 Inference:
 ```
-python run_inference.py models/diff_fibonacci_model.pth ./data --output results.json
+./run.sh infer models/diff_fibonacci_model.pth ./data --output results.json
 ```
 
 
@@ -36,36 +36,36 @@ First we need some statistics on the synthetic data. They should look something 
 
 We can create a json file using the following command:
 ```
-python data_processing/get_img_stats.py <path/to/synthetic/img>
+./run.sh stats <path/to/synthetic/img>
 ```
 
 Then we use this file for converting all experimental data to synthetic using
 ```
-python data_processing/create_synthetic_images.py ./data img_stats.json --output_folder ./data_processed --threshold 0.01 --nms_size 20
+./run.sh synthetic ./data img_stats.json --output_folder ./data_processed --threshold 0.01 --nms_size 20
 ```
 
 
 
 ## Experimental Data Simulator
 
-Simulate experiment data using the `simulate_experiment.py` script. It will automatically create simulated experiment data.
+Simulate experiment data using the `simulation/simulate_experiment.py` script. It will automatically create simulated experiment data.
 
 
 ## Segmentation Data Preparation
 
 Simulate experiment multiple times (e.g. 10):
 ```
-count=10 for i in $(seq 1 ${count}); do python simulate_experiment.py --output_folder data; done
+count=10 for i in $(seq 1 ${count}); do ./run.sh simulate-random --output_folder data; done
 ```
 
 Prepare data for training:
 ```
-python utils/prepare_segmentation_data.py --data_path data/volume_500/ --output_path data/segmentation
+./run.sh prepare-segmentation --data_path data/volume_500/ --output_path data/segmentation
 ```
 
 Train segmentation
 ```
-python train_segmentation.py --num_epochs 8 > segmentation_"$(date +%s)".log
+./run.sh train-segmentation --num_epochs 8 > segmentation_"$(date +%s)".log
 ```
 
 ## Configured rotation experiments
@@ -73,7 +73,7 @@ python train_segmentation.py --num_epochs 8 > segmentation_"$(date +%s)".log
 Install the lightweight simulator dependencies (no trained models or PyTorch needed):
 
 ```bash
-python -m pip install -r requirements-simulation.txt
+python -m pip install -r requirements/requirements-simulation.txt
 ```
 
 The example config contains the custom cell `a=9.68934, b=8.41686,
@@ -83,19 +83,19 @@ It preserves all provided cell digits. Run either through the existing script or
 
 ```bash
 # Generate all reflections within the configured resolution; intensity 1000 each.
-python simulate_experiment.py --config configs/rotation_experiment.json \
+./run.sh simulate --config configs/rotation_experiment.json \
   --intensity-mode constant --output results/constant
 
 # Use only supplied HKL rows, with intensities from column 4.
-python simulate_experiment.py --config configs/rotation_experiment.json \
+./run.sh simulate --config configs/rotation_experiment.json \
   --hkl-file /path/to/output.hkl --intensity-mode hkl --output results/measured
 
 # Same supplied HKL reflection list, but equal intensities for comparison.
-python simulate_experiment.py --config configs/rotation_experiment.json \
+./run.sh simulate --config configs/rotation_experiment.json \
   --hkl-file /path/to/output.hkl --intensity-mode constant --output results/equal
 
 # Override scan geometry on the command line.
-python simulate_experiment.py --config configs/rotation_experiment.json \
+./run.sh simulate --config configs/rotation_experiment.json \
   --axis 0 1 0 --start-deg -60 --stop-deg 60 --step-deg 0.5 \
   --output results/half_degree
 ```
@@ -263,7 +263,7 @@ GDA_IMAGE=geometric-diffraction:cpu ./run.sh build --build-arg TORCH_BACKEND=cpu
 GDA_IMAGE=geometric-diffraction:cpu ./run.sh --gpus none train --root_dir data/processed
 ```
 
-Build again after dependency/Dockerfile changes. Source edits are visible through
+Build again after dependency or `docker/Dockerfile` changes. Source edits are visible through
 the bind mount immediately. `GDA_IMAGE` selects the image name; `GDA_SHM_SIZE`
 controls container shared memory (default `2g`). Downloaded pretrained weights
 are cached in `.cache/torch` in your checkout. Initial training can require
@@ -280,11 +280,38 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 `./run.sh --local COMMAND ...` skips Docker and uses the installed Python
 interpreter (`PYTHON` overrides `python3`). Full local functionality requires
-`requirements.txt` and `requirements-simulation.txt`; configured simulation alone
-needs only `requirements-simulation.txt`. Docker is the default execution mode.
+`requirements/requirements.txt` and `requirements/requirements-simulation.txt`; configured simulation alone
+needs only `requirements/requirements-simulation.txt`. Docker is the default execution mode.
 
 Additional preprocessing commands are `convert-tif`, `synthetic`, `stats`,
 `overlay`, and `extract-peaks`; each accepts the underlying script's `--help`.
 `python` forwards arbitrary Python arguments for diagnostics or custom work.
 Configured rotation output is quantitative diffraction data; the existing
 classification training workflow expects the original labeled directory split.
+
+
+## Repository layout
+
+`run.sh` is the only visible file at the repository root. Run the commands above
+from that root; moving this README into `docs/` does not change command paths.
+
+| Folder | Contents |
+| --- | --- |
+| `simulation/` | Configured and random experiment simulation, geometry utilities |
+| `training/` | Classification and segmentation training entry points |
+| `inference/` | Classification and segmentation inference entry points |
+| `data_processing/` | Image conversion, splitting, statistics and overlays |
+| `utils/` | Shared utilities and segmentation data preparation |
+| `docker/` | Dockerfile and its Docker-specific build-context ignore file |
+| `requirements/` | Full and simulation-only dependency files |
+| `configs/` | Experiment configurations |
+| `docs/` | This documentation |
+| `tests/` | Geometry and launcher regression tests |
+| `notebooks/` | Interactive analysis notebooks |
+| `models/` | Model checkpoints |
+
+Python entry points can also be invoked as modules from the root, for example
+`python -m training.train --help` or `python -m inference.run_inference --help`.
+Use `./run.sh build` for Docker builds, or explicitly run
+`docker build -f docker/Dockerfile -t geometric-diffraction:latest .`. The context
+remains the repository root, and Docker uses `docker/Dockerfile.dockerignore`.

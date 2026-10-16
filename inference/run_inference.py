@@ -5,7 +5,7 @@ run_inference.py
 This script performs image classification inference using a pre-trained ResNet-50 model.
 
 Usage:
-    python run_inference.py <model_path> <image_path>
+    python -m inference.run_inference <model_path> <image_path>
 
 Arguments:
     model_path (str): Path to the model weights file.
@@ -28,8 +28,8 @@ Dependencies:
     - tqdm
 
 Example:
-    python run_inference.py /path/to/model_weights.pth /path/to/image.jpg --visualize
-    python run_inference.py /path/to/model_weights.pth /path/to/image_directory --output results.json
+    python -m inference.run_inference /path/to/model_weights.pth /path/to/image.jpg --visualize
+    python -m inference.run_inference /path/to/model_weights.pth /path/to/image_directory --output results.json
 """
 import torch
 from torchvision import models, transforms

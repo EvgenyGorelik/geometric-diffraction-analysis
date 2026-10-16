@@ -8,7 +8,7 @@ Usage: ./run.sh [--local] [--mount HOST:CONTAINER[:ro]] [--gpus auto|none|all|DE
 Commands (remaining arguments are forwarded unchanged):
   simulate              Configured rotation experiment (default config if omitted)
   simulate-random       Original random-orientation training-data simulator
-  train                 Classification training (train.py)
+  train                 Classification training
   train-segmentation    Segmentation training
   infer                 Classification inference
   infer-segmentation    Segmentation inference
@@ -38,6 +38,7 @@ Environment: GDA_IMAGE (default geometric-diffraction:latest), GDA_GPUS (auto),
 GDA_SHM_SIZE (2g), PYTHON (python3, local/container interpreter).
 GPU auto mode enables all GPUs for training/inference only when nvidia-smi works.
 Explicit GPU use requires NVIDIA Container Toolkit. --local uses installed Python.
+Documentation: docs/README.md
 HELP
 }
 
@@ -82,11 +83,11 @@ if [[ "${GDA_IN_CONTAINER:-0}" == 1 || "$local_mode" == 1 ]]; then
             done
             if [[ "$has_config" == 0 ]]; then set -- --config configs/rotation_experiment.json "$@"; fi
             exec "$python_bin" -m simulation.rotation_experiment "$@" ;;
-        simulate-random) module=simulate_experiment ;;
-        train) module=train ;;
-        train-segmentation) module=train_segmentation ;;
-        infer) module=run_inference ;;
-        infer-segmentation) module=infer_segmentation ;;
+        simulate-random) module=simulation.simulate_experiment ;;
+        train) module=training.train ;;
+        train-segmentation) module=training.train_segmentation ;;
+        infer) module=inference.run_inference ;;
+        infer-segmentation) module=inference.infer_segmentation ;;
         split) module=data_processing.create_data_split ;;
         prepare-segmentation) module=utils.prepare_segmentation_data ;;
         convert-tif) module=data_processing.convert_tif ;;
@@ -108,10 +109,10 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 image="${GDA_IMAGE:-geometric-diffraction:latest}"
 if [[ "$command" == build ]]; then
-    exec docker build -t "$image" "$@" "$repo_dir"
+    exec docker build -f "$repo_dir/docker/Dockerfile" -t "$image" "$@" "$repo_dir"
 fi
 if ! docker image inspect "$image" >/dev/null 2>&1; then
-    docker build -t "$image" "$repo_dir"
+    docker build -f "$repo_dir/docker/Dockerfile" -t "$image" "$repo_dir"
 fi
 run_args=(run --rm --init --shm-size "${GDA_SHM_SIZE:-2g}")
 # Avoid root-owned experiment and checkpoint files on Linux bind mounts.

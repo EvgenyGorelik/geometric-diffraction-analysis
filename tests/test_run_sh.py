@@ -1,4 +1,5 @@
 """Exercise launcher boundaries without requiring a Docker daemon or GPU."""
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -44,7 +45,7 @@ sys.exit(int(os.environ.get('COMMAND_EXIT', 0)))
         self.assertEqual(result.returncode, 0, result.stderr)
         inspect, build, run = self.calls()
         self.assertEqual(inspect, ['image', 'inspect', 'test-gda:local'])
-        self.assertEqual(build, ['build', '-t', 'test-gda:local', str(ROOT)])
+        self.assertEqual(build, ['build', '-f', str(ROOT/'docker/Dockerfile'), '-t', 'test-gda:local', str(ROOT)])
         self.assertIn(f'{ROOT}:/workspace', run)
         self.assertIn('/data/my experiment:/data:ro', run)
         self.assertEqual(run[-4:], ['test-gda:local', 'simulate', '--hkl-file', '/data/my file.hkl'])
@@ -74,12 +75,22 @@ sys.exit(6)
         interpreter.chmod(0o755)
         result = self.run_launcher('--local', 'train', '--root_dir', 'a directory', PYTHON=str(interpreter))
         self.assertEqual(result.returncode, 6)
-        self.assertEqual(self.calls()[-1], [str(ROOT), '-m', 'train', '--root_dir', 'a directory'])
+        self.assertEqual(self.calls()[-1], [str(ROOT), '-m', 'training.train', '--root_dir', 'a directory'])
         result = self.run_launcher('simulate', '--config=custom.json', '--output', 'my output',
                                    GDA_IN_CONTAINER='1', GDA_PROJECT_DIR=str(ROOT), PYTHON=str(interpreter))
         self.assertEqual(result.returncode, 6)
         self.assertEqual(self.calls()[-1], [str(ROOT), '-m', 'simulation.rotation_experiment',
                                            '--config=custom.json', '--output', 'my output'])
+
+    def test_repository_layout(self):
+        visible_files = {p.name for p in ROOT.iterdir() if p.is_file() and not p.name.startswith('.')}
+        self.assertEqual(visible_files, {'run.sh'})
+        self.assertTrue((ROOT/'docker/Dockerfile').is_file())
+        self.assertTrue((ROOT/'docker/Dockerfile.dockerignore').is_file())
+        for module in ('simulation.simulate_experiment', 'training.train',
+                       'training.train_segmentation', 'inference.run_inference',
+                       'inference.infer_segmentation'):
+            self.assertIsNotNone(importlib.util.find_spec(module), module)
 
     def test_unknown_command_does_not_build(self):
         result = self.run_launcher('unknown')

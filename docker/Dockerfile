@@ -16,11 +16,11 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
-COPY requirements.txt requirements-simulation.txt ./
+COPY requirements/ ./requirements/
 RUN python -m pip install --upgrade pip && \
     python -m pip install torch==2.5.1 torchvision==0.20.1 \
         --index-url https://download.pytorch.org/whl/${TORCH_BACKEND} && \
-    python -m pip install -r requirements.txt -r requirements-simulation.txt && \
+    python -m pip install -r requirements/requirements.txt -r requirements/requirements-simulation.txt && \
     python -m pip check
 COPY . .
 COPY run.sh /usr/local/bin/gda-run
