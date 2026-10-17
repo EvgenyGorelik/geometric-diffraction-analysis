@@ -35,17 +35,3 @@ def lattice_parameters_reciprocal(a, b, c, alpha, beta, gamma):
                                       (np.sin(alpha) * np.sin(beta))))
     
     return astar, bstar, cstar, alphastar, betastar, gammastar
-
-# Example usage:
-a, b, c = 5.0, 6.0, 7.0
-alpha, beta, gamma = 90.0, 90.0, 90.0
-
-astar, bstar, cstar, alphastar, betastar, gammastar = lattice_parameters_reciprocal(a, b, c, alpha, beta, gamma)
-
-print(f"Reciprocal lattice parameters:")
-print(f"astar = {astar:.3f}")
-print(f"bstar = {bstar:.3f}")
-print(f"cstar = {cstar:.3f}")
-print(f"alphastar = {alphastar:.3f}°")
-print(f"betastar = {betastar:.3f}°")
-print(f"gammastar = {gammastar:.3f}°")

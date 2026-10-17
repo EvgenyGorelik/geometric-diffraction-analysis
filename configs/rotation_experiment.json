@@ -1,0 +1,31 @@
+{
+  "a": 9.68934,
+  "b": 8.41686,
+  "c": 35.6672,
+  "alpha": 90,
+  "beta": 89.2448,
+  "gamma": 90,
+  "wavelength": 0.0251,
+  "resolution": 0.85,
+  "rotation_axis": [
+    0,
+    1,
+    0
+  ],
+  "start_deg": -60,
+  "stop_deg": 60,
+  "step_deg": 1,
+  "initial_euler_deg": [
+    0,
+    0,
+    0
+  ],
+  "excitation_error": 0.01,
+  "excitation_error_slope": 0.05,
+  "intensity_mode": "constant",
+  "constant_intensity": 1000,
+  "duplicate_policy": "error",
+  "image_size": 1024,
+  "focal_length_px": 10240,
+  "spot_radius_px": 5
+}
