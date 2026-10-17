@@ -9,7 +9,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from simulation.rotation_experiment import (load_config, reciprocal_basis, load_hkl,
-    scan_angles, generate_hkl, run_experiment)
+    scan_angles, generate_hkl, run_experiment, png_preview)
 from simulation.utils.camera_projection import camera_matrices, project_camera, rasterize_camera
 from simulation.utils.simulate_diffraction_experiment import ewald_association, simulate_diffraction_experiment
 
@@ -17,6 +17,18 @@ CELL = dict(a=10, b=10, c=10, alpha=90, beta=90, gamma=90, wavelength=.0251)
 
 
 class RotationTests(unittest.TestCase):
+    def test_png_scaling(self):
+        raw = np.array([[-10, 0, 100, 1000.]])
+        original = raw.copy()
+        np.testing.assert_array_equal(png_preview(raw, 1000, 'linear'), [[0, 0, 26, 255]])
+        log = png_preview(raw, 1000)
+        self.assertGreater(log[0, 2], 26)
+        self.assertEqual(log[0, 3], 255)
+        np.testing.assert_array_equal(png_preview(raw, 0), np.zeros_like(raw))
+        np.testing.assert_array_equal(raw, original)
+        with self.assertRaises(ValueError):
+            png_preview(raw, 1000, 'unknown')
+
     def test_scan_interval(self):
         np.testing.assert_allclose(scan_angles(0, 1, .3), [0, .3, .6, .9])
         np.testing.assert_allclose(scan_angles(1, 0, -.5), [1, .5, 0])
@@ -89,6 +101,17 @@ class RotationTests(unittest.TestCase):
             image = np.load(root/'raw/frame_00000.npy')
             self.assertEqual(image.max(), 1000)
             self.assertEqual(image.sum(), 1200.5)
+            visualization = json.loads((root/'raw/visualization.json').read_text())
+            self.assertEqual(visualization['vmax'], 1000)
+            for index in range(2):
+                with Image.open(root/f'raw/frame_{index:05d}.png') as preview:
+                    self.assertEqual(preview.mode, 'L')
+                    self.assertEqual(preview.size, (33, 33))
+                    raw = np.load(root/f'raw/frame_{index:05d}.npy')
+                    np.testing.assert_array_equal(np.asarray(preview), png_preview(raw, 1000))
+            # The 200.5 reflection stays equally bright as the stronger spot disappears.
+            self.assertEqual(np.array(Image.open(root/'raw/frame_00001.png')).max(),
+                             int(png_preview(np.array([200.5]), 1000)[0]))
             self.assertEqual(len(frames), 2)
             np.testing.assert_array_equal(np.asarray(Image.open(root/'raw/frame_00000.tif')), image.astype(np.float32))
             intrinsic = json.loads((root/'raw/intrinsics.json').read_text())

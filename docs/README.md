@@ -161,6 +161,7 @@ above it. It does not cap growth beyond 333.
 
 Each frame produces:
 
+- `frame_00000.png`: 8-bit grayscale visualization series, saved with PIL.
 - `frame_00000.npy`: authoritative float64 detector array, black background 0.
 - `frame_00000.tif`: float32 TIFF, preserving dynamic range for image software.
 - `frame_00000.csv`: on-detector HKL, input intensity, continuous projected x/y,
@@ -315,3 +316,26 @@ Python entry points can also be invoked as modules from the root, for example
 Use `./run.sh build` for Docker builds, or explicitly run
 `docker build -f docker/Dockerfile -t geometric-diffraction:latest .`. The context
 remains the repository root, and Docker uses `docker/Dockerfile.dockerignore`.
+
+
+### PNG visualization series
+
+Every configured simulation also saves `frame_00000.png`, `frame_00001.png`, etc.
+Open these in a standard image viewer. PNGs use bright spots on a black background
+and a shared scale across the complete experiment so intensities remain comparable
+when stepping through frames. The default logarithmic mapping makes weak reflections
+easier to see: `255 * log(1 + max(I, 0)) / log(1 + series_max)`.
+
+```bash
+./run.sh simulate --output results/visualization
+# Optional linear brightness mapping instead of logarithmic:
+./run.sh simulate --png-scale linear --output results/linear_preview
+```
+
+Set `png_scale` to `log` or `linear` in your config, or override it with
+`--png-scale`. `visualization.json` records the scale and series maximum;
+`frames.json` links each frame to its PNG. Negative intensities are displayed
+as zero; empty/all-nonpositive series produce black PNGs. Preview files are
+normalized for viewing; NPY and TIFF retain the quantitative intensity values.
+PNGs are written after all raw frames have been simulated so the common maximum
+is known. The conversion reads one raw frame at a time.

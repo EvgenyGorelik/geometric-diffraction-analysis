@@ -101,6 +101,19 @@ def scan_angles(start, stop, step):
     return start + np.arange(count) * step
 
 
+def png_preview(image, vmax, scale='log'):
+    """8-bit visualization only; shared vmax keeps brightness stable across frames."""
+    if scale not in ('linear', 'log'):
+        raise ValueError('png_scale must be linear or log')
+    if not np.isfinite(vmax) or vmax < 0:
+        raise ValueError('PNG maximum must be finite and nonnegative')
+    if vmax == 0:
+        return np.zeros(image.shape, dtype=np.uint8)
+    positive = np.clip(image, 0, vmax)
+    normalized = np.log1p(positive)/np.log1p(vmax) if scale == 'log' else positive/vmax
+    return np.rint(255 * normalized).astype(np.uint8)
+
+
 def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
     config = dict(config)
     basis = reciprocal_basis(config)
@@ -151,6 +164,8 @@ def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
         config.get('principal_point_px'), config.get('camera_distance'))
     spot_radius = config.get('spot_radius_px', 5)
     rasterize_camera(np.empty((0, 2)), np.empty(0), size, spot_radius)  # validate
+    png_scale = config.get('png_scale', 'log')
+    png_preview(np.zeros((1, 1)), 0, png_scale)  # validate before output
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
@@ -162,11 +177,12 @@ def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
                   start_deg=float(angles[0]), stop_deg=float(config.get('stop_deg', 180)),
                   step_deg=float(config.get('step_deg', 1)), initial_euler_deg=initial.tolist(),
                   excitation_error=tolerance, excitation_error_slope=slope,
-                  excitation_reference_hkl=reference_hkl.tolist(), projection='pinhole')
+                  excitation_reference_hkl=reference_hkl.tolist(), projection='pinhole', png_scale=png_scale)
     (output/'config.json').write_text(json.dumps(config, indent=2)+'\n')
     (output/'intrinsics.json').write_text(json.dumps(intrinsic.tolist(), indent=2)+'\n')
     extrinsics = []
     frames = []
+    png_vmax = 0.0
     for frame, angle in enumerate(angles):
         rotation = Rotation.from_rotvec(axis*np.deg2rad(angle))
         rotated = rotation.apply(reflections)
@@ -179,6 +195,7 @@ def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
         xy, depths, projected = project_camera(rotated[mask], intrinsic, extrinsic)
         selected = selected[projected]
         image, pixels, valid = rasterize_camera(xy, intensities[selected], size, spot_radius)
+        png_vmax = max(png_vmax, float(image.max()))
         stem = f'frame_{frame:05d}'
         np.save(output/f'{stem}.npy', image)
         # Float TIFF keeps high dynamic range; NPY is the authoritative float64 image.
@@ -189,7 +206,15 @@ def run_experiment(config, output, *, hkl_path=None, intensity_mode=None):
             for j in np.flatnonzero(valid):
                 idx = selected[j]
                 writer.writerow([*hkl[idx], intensities[idx], *xy[j], *pixels[j], depths[j], errors[idx], thresholds[idx]])
-        frames.append({'frame': frame, 'angle_deg': float(angle), 'reflections_on_detector': int(valid.sum()), 'image': f'{stem}.npy'})
+        frames.append({'frame': frame, 'angle_deg': float(angle), 'reflections_on_detector': int(valid.sum()), 'image': f'{stem}.npy', 'preview': f'{stem}.png'})
+    # Read one raw frame at a time; avoid retaining the image stack in memory.
+    for frame_info in frames:
+        raw = np.load(output/frame_info['image'], mmap_mode='r')
+        Image.fromarray(png_preview(raw, png_vmax, png_scale)).save(output/frame_info['preview'])
+        del raw
+    (output/'visualization.json').write_text(json.dumps(
+        {'scale': png_scale, 'vmin': 0, 'vmax': png_vmax, 'bit_depth': 8,
+         'negative_values': 'clipped to zero in previews only'}, indent=2)+'\n')
     (output/'extrinsics.json').write_text(json.dumps(extrinsics, indent=2)+'\n')
     (output/'frames.json').write_text(json.dumps(frames, indent=2)+'\n')
     return frames
@@ -205,11 +230,14 @@ def main(argv=None):
     parser.add_argument('--start-deg', type=float)
     parser.add_argument('--stop-deg', type=float)
     parser.add_argument('--step-deg', type=float)
+    parser.add_argument('--png-scale', choices=['linear', 'log'], help='PNG preview scale (default: log)')
     args = parser.parse_args(argv)
     config = load_config(args.config)
     for name in ('start_deg', 'stop_deg', 'step_deg'):
         if getattr(args, name) is not None:
             config[name] = getattr(args, name)
+    if args.png_scale is not None:
+        config['png_scale'] = args.png_scale
     if args.axis is not None:
         config['rotation_axis'] = args.axis
     if config.get('hkl_file'):
